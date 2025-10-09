@@ -1,64 +1,76 @@
 "use client";
-import Image from "next/image";
+import { useState } from "react";
+import dynamic from "next/dynamic";
 
-export default function Home() {
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const res=fetch('/api/submit', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        name: e.target[0].value,
-        rollNo: e.target[1].value,
-        department: e.target[2].value,
-        domain: e.target[3].value,
-      }),
-    });
-    console.log(res);
-    
-    alert("Form submitted!");
-  }
+// ✅ Correct dynamic import
+const QrScanner = dynamic(
+  async () => {
+    const mod = await import("react-qr-barcode-scanner");
+    return mod.default;
+  },
+  { ssr: false }
+);
+
+export default function AttendanceScanner() {
+  const [result, setResult] = useState(null);
+  const [status, setStatus] = useState("Scan a QR to begin...");
+  const [loading, setLoading] = useState(false);
+
+  const handleScan = async (data) => {
+    if (!data || loading) return;
+    const qr = data.text || data;
+
+    try {
+      setLoading(true);
+      setStatus("Processing...");
+      const res = await fetch("/api/attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ qr }),
+      });
+
+      const json = await res.json();
+      setResult(json);
+
+      if (json.success && json.alreadyMarked)
+        setStatus("✅ Already marked attendance");
+      else if (json.success)
+        setStatus(`✅ Marked attendance for ${json.updated?.user_name}`);
+      else setStatus(`❌ ${json.error || "Unknown error"}`);
+    } catch (err) {
+      console.error(err);
+      setStatus("❌ Failed to process QR");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleError = (err) => {
+    console.error(err);
+    setStatus("⚠️ Camera error or permission denied");
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-blue-600 to-purple-700 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
-        <h1 className="text-3xl font-bold text-center text-gray-800 mb-6">
-          Hackathon Registration
-        </h1>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-6">
+      <h1 className="text-2xl font-bold mb-4">📷 Attendance QR Scanner</h1>
 
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          <input
-            type="text"
-            placeholder="Enter your name"
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-           
-          />
-          <input
-            type="email"
-            placeholder="Enter your roll no"
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <input
-            type="text"
-            placeholder="Enter your department"
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <input
-            type="text"
-            placeholder="Domain"
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-
-          <button
-            type="submit"
-            className="w-full py-2 mt-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition duration-200"
-          >
-            Submit
-          </button>
-        </form>
-       
+      <div className="w-full max-w-sm aspect-square bg-white border border-gray-300 rounded-xl shadow-md overflow-hidden flex items-center justify-center">
+        <QrScanner
+          onUpdate={(err, result) => {
+            if (err) handleError(err);
+            if (result) handleScan(result);
+          }}
+          style={{ width: "100%", height: "100%" }}
+        />
       </div>
+
+      <p className="mt-4 text-gray-700 text-center">{status}</p>
+
+      {result && (
+        <div className="mt-4 p-3 bg-white rounded-xl shadow w-full max-w-sm text-sm text-gray-800">
+          <pre>{JSON.stringify(result, null, 2)}</pre>
+        </div>
+      )}
     </div>
   );
 }
