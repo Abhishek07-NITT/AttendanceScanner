@@ -153,7 +153,7 @@ export default function QrScannerPage() {
               onChange={(e) => setAttendanceIndex(Number(e.target.value))}
               className="px-3 py-1 border rounded"
             >
-              {[...Array(10)].map((_, i) => (
+              {[...Array(8)].map((_, i) => (
                 <option key={i + 1} value={i + 1}>
                   Attendance {i + 1}
                 </option>
