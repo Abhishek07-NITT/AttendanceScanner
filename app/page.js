@@ -48,7 +48,7 @@ export default function QrScannerPage() {
         fps: 30,
         qrbox: { width: 800, height: 1000 },
       },async (decodedText) => {
-        alert("Scanner")
+        alert(decodedText)
       // ignore if already submitting
       if (submittingRef.current) return;
 
@@ -158,21 +158,11 @@ export default function QrScannerPage() {
 
     // scanner.render(onScanSuccess, onScanError);
 
-     return () => {
-      const sc = scannerRef.current;
-      if (sc) {
-        sc
-          .stop()
-          .then(() => sc.clear())
-          .catch((err) =>
-            console.error("Failed to stop/clear scanner on unmount:", err)
-          );
-        scannerRef.current = null;
-      }
-      if (clearTimerRef.current) {
-        clearTimeout(clearTimerRef.current);
-        clearTimerRef.current = null;
-      }
+    return () => {
+   
+      html5QrCode.stop().catch((err) => {
+        console.error("Failed to stop html5QrCode", err);
+      })
     };
   }, [attendanceIndex]); // keep attendanceIndex in dependency so latest value is used
 
