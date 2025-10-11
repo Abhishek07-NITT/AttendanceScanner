@@ -48,7 +48,7 @@ export default function QrScannerPage() {
         fps: 30,
         qrbox: { width: 800, height: 1000 },
       },async (decodedText) => {
-        alert(decodedText)
+        
       // ignore if already submitting
       if (submittingRef.current) return;
 
