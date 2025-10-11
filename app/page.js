@@ -48,7 +48,7 @@ export default function QrScannerPage() {
         fps: 30,
         qrbox: { width: 800, height: 1000 },
       },async (decodedText) => {
-        alert(decodedText)
+        alert("Scanner")
       // ignore if already submitting
       if (submittingRef.current) return;
 
@@ -158,10 +158,17 @@ export default function QrScannerPage() {
 
     // scanner.render(onScanSuccess, onScanError);
 
-    return () => {
-      scanner.clear().catch((err) =>
-        console.error("Failed to clear scanner on unmount:", err)
-      );
+     return () => {
+      const sc = scannerRef.current;
+      if (sc) {
+        sc
+          .stop()
+          .then(() => sc.clear())
+          .catch((err) =>
+            console.error("Failed to stop/clear scanner on unmount:", err)
+          );
+        scannerRef.current = null;
+      }
       if (clearTimerRef.current) {
         clearTimeout(clearTimerRef.current);
         clearTimerRef.current = null;
