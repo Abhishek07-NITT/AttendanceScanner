@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
-import { Html5QrcodeScanner } from "html5-qrcode";
+// import { Html5QrcodeScanner } from "html5-qrcode";
+import { Html5Qrcode } from "html5-qrcode";
 
 export default function QrScannerPage() {
   const [scannedData, setScannedData] = useState(null);
@@ -10,6 +11,7 @@ export default function QrScannerPage() {
   const lastScanTimeRef = useRef(0);
   const clearTimerRef = useRef(null);
   const fileInputRef = useRef(null);
+    
 
   // helper to show result and auto-clear after 5s
   function showResult(msg) {
@@ -38,13 +40,15 @@ export default function QrScannerPage() {
   }
 
   useEffect(() => {
-    const scanner = new Html5QrcodeScanner(
-      "reader",
-      { fps: 5, qrbox: { width: 250, height: 250 } },
-      false
-    );
+    const html5QrCode = new Html5Qrcode("reader");
 
-    async function onScanSuccess(decodedText, decodedResult) {
+    html5QrCode.start(
+      { facingMode: "environment" },
+      {
+        fps: 30,
+        qrbox: { width: 800, height: 1000 },
+      },async (decodedText) => {
+        alert(decodedText)
       // ignore if already submitting
       if (submittingRef.current) return;
 
@@ -94,12 +98,65 @@ export default function QrScannerPage() {
         }, 2000);
       }
     }
+      
+    );
 
-    function onScanError(errorMessage) {
-      // non-fatal: QR not detected on some frames
-    }
+    // async function onScanSuccess(decodedText, decodedResult) {
+    //   // ignore if already submitting
+    //   if (submittingRef.current) return;
 
-    scanner.render(onScanSuccess, onScanError);
+    //   // ignore quick duplicates (3s cooldown)
+    //   const now = Date.now();
+    //   if (
+    //     lastScannedRef.current === decodedText &&
+    //     now - lastScanTimeRef.current < 3000
+    //   ) {
+    //     return;
+    //   }
+
+    //   submittingRef.current = true;
+    //   try {
+    //     // send raw CSV string + attendanceIndex to server; server validates SECRET_STRING
+    //     const res = await fetch("/api/submit", {
+    //       method: "POST",
+    //       headers: { "Content-Type": "application/json" },
+    //       body: JSON.stringify({ qr: decodedText, attendanceIndex }),
+    //     });
+
+    //     if (res.ok) {
+    //       const json = await res.json();
+    //       if (json.success) {
+    //         const msg = json.alreadyMarked
+    //           ? `✅ Already marked (col ${json.usedColumn}) for ${json.updated?.user_name || ""}`
+    //           : `✅ Attendance marked (col ${json.usedColumn}) for ${json.updated?.user_name || ""}`;
+
+    //         showResult(msg);
+    //       } else {
+    //         showResult(`❌ Failed: ${json.error || "server error"}`);
+    //       }
+    //     } else {
+    //       const txt = await res.text();
+    //       showResult(`Server error: ${res.status} ${txt}`);
+    //     }
+    //   } catch (err) {
+    //     console.error(err);
+    //     showResult("❌ Network error while submitting attendance.");
+    //   } finally {
+    //     // record last scan and set short cooldown, but keep scanner active
+    //     lastScannedRef.current = decodedText;
+    //     lastScanTimeRef.current = Date.now();
+    //     // small delay before allowing next submit (prevents double-posts)
+    //     setTimeout(() => {
+    //       submittingRef.current = false;
+    //     }, 2000);
+    //   }
+    // }
+
+    // function onScanError(errorMessage) {
+    //   // non-fatal: QR not detected on some frames
+    // }
+
+    // scanner.render(onScanSuccess, onScanError);
 
     return () => {
       scanner.clear().catch((err) =>
@@ -131,7 +188,7 @@ export default function QrScannerPage() {
     <>
       <nav className="w-full flex items-center justify-between px-6 py-3 bg-black shadow" style={{ borderBottom: "1px solid #e5e7eb" }}>
         <div className="flex-1"></div>
-        <h2 className="text-xl text-white font-bold text-gray-800 flex-1 text-center">Attendance Marker</h2>
+        <h2 className="text-xl  font-bold text-gray-800 flex-1 text-center">Attendance Marker</h2>
         <div className="flex-1 flex justify-end">
           <img
             src="/transfinitte-logo.svg"
@@ -143,7 +200,7 @@ export default function QrScannerPage() {
       </nav>
 
       <div className="min-h-screen flex items-center justify-center bg-black p-4">
-        <div className="bg-white rounded-2xl shadow-lg p-6 max-w-md w-full text-center">
+        <div className="bg-white rounded-2xl shadow-lg p-6 max-w-md w-full text-center " style={{ width: "100%", height: "80vh" }}>
           <h1 className="text-2xl font-bold mb-4 text-gray-800">QR Scanner</h1>
 
           <div className="mb-4 flex items-center justify-center gap-3">
@@ -169,7 +226,7 @@ export default function QrScannerPage() {
             />
           </div>
 
-          <div id="reader" className="w-full flex justify-center"></div>
+          <div id="reader" className="w-full flex justify-center "  style={{ width: "100%", height: "80vh" }}></div>
 
           {scannedData ? (
             <div className="mt-6 p-4 border rounded bg-gray-50">

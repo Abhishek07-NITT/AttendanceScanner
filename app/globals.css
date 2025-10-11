@@ -1,1 +1,18 @@
 @import "tailwindcss";
+#reader {
+  width: 100% !important;
+  height: 500px !important;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+#reader video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 12px;
+}
+#reader__scan_region {
+  width: 100% !important;
+  height: 100% !important;
+}
