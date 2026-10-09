@@ -15,7 +15,7 @@
     "googleapis": "^159.0.0",
     "html5-qrcode": "^2.3.8",
     "mongoose": "^8.18.1",
-    "next": "15.5.2",
+    "next": "15.5.9",
     "pdfkit": "^0.17.2",
     "qrcode": "^1.5.4",
     "react": "19.1.0",
