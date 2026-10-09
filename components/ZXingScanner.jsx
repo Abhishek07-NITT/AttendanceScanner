@@ -179,12 +179,35 @@ export default function ZXingScanner() {
     try {
       streamRef.current = stream;
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.setAttribute("playsinline", "true");
-        videoRef.current.setAttribute("webkit-playsinline", "true");
-        videoRef.current.muted = true;
-        await videoRef.current.play();
+      const video = videoRef.current;
+      if (video) {
+        video.srcObject = stream;
+        video.setAttribute("playsinline", "true");
+        video.setAttribute("webkit-playsinline", "true");
+        video.defaultMuted = true;
+        video.muted = true;
+
+        // Wait for video element to ingest metadata before playing (avoids playback race in Brave/Android)
+        await new Promise((resolve) => {
+          if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+            resolve();
+          } else {
+            video.onloadedmetadata = () => resolve();
+            // Safety timeout
+            setTimeout(resolve, 500);
+          }
+        });
+
+        try {
+          await video.play();
+        } catch (playErr) {
+          // If browser paused or aborted play, retry once muted
+          if (playErr.name !== "AbortError") {
+            console.warn("Primary play attempt interrupted, retrying...", playErr);
+            video.muted = true;
+            await video.play();
+          }
+        }
       }
 
       // Check flashlight/torch support
@@ -201,7 +224,12 @@ export default function ZXingScanner() {
       setCameraActive(true);
     } catch (err) {
       console.error("Error playing video stream:", err);
-      setCameraError("Camera stream started but playback failed. Tap Retry.");
+      // Only set error if camera stream is truly dead
+      if (!streamRef.current || !streamRef.current.active) {
+        setCameraError("Camera stream started but playback failed. Tap Retry.");
+      } else {
+        setCameraActive(true);
+      }
     }
   }, [facingMode, stopCameraStream]);
 
