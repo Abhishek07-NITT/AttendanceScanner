@@ -2,15 +2,17 @@ import QRCode from "qrcode";
 import { google } from "googleapis";
 import crypto from "crypto";
 
-const SHEET_ID = "15B0voPZUZDSvtBuCFnGlEGxJ6g3F8fMn9Ib1QS1JNec";
 const RANGE = "A1:Z"; // Adjust range as needed
 
 async function getAuth() {
+  const rawKey = process.env.GOOGLE_PRIVATE_KEY || "";
+  const cleanedKey = rawKey.replace(/^"|"$/g, "").replace(/\\n/g, "\n");
+
   const auth = new google.auth.GoogleAuth({
     credentials: {
       type: "service_account",
       project_id: process.env.GOOGLE_PROJECT_ID,
-      private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+      private_key: cleanedKey,
       client_email: process.env.GOOGLE_CLIENT_EMAIL,
     },
     scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
@@ -31,10 +33,11 @@ export async function POST(request) {
 
     const auth = await getAuth();
     const sheets = google.sheets({ version: "v4", auth });
+    const targetSheetId = process.env.SHEET_ID || "1ZlnHaUdnEfEvu1TkG77yzlEmLTnMScaphN2R0ww1O2E";
 
     // Get sheet data
     const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID,
+      spreadsheetId: targetSheetId,
       range: RANGE,
     });
 
