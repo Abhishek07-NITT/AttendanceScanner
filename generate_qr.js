@@ -3,10 +3,12 @@ import csv from "csv-parser";
 import QRCode from "qrcode";
 import dotenv from "dotenv";
 import { createCanvas, loadImage } from "canvas";
+import crypto from "crypto";
 
 dotenv.config(); // Load .env file
 
-const SECRET_STRING = process.env.SECRET_STRING;
+const SECRET_STRING = process.env.SECRET_STRING || "transfinitte-26-secret-key";
+
 const inputFile = "qr.csv";
 const outputDir = "qrs";
 
@@ -25,14 +27,24 @@ fs.createReadStream(inputFile)
     try {
       const { user_id, user_name, team_id } = row;
 
+      const normalizedUserId = (user_id || "").toString().trim();
+      const normalizedTeamId = (team_id || "").toString().trim();
+      const normalizedUserName = (user_name || "").toString().trim();
+
       // Clean up for filenames
-      const safeUserName = user_name
-        .trim()
+      const safeUserName = normalizedUserName
         .replace(/\s+/g, "_")
         .replace(/[^a-zA-Z0-9_]/g, "");
-      const fileName = `${team_id}_${safeUserName}.png`;
+      const fileName = `${normalizedTeamId}_${safeUserName}.png`;
 
-      const qrContent = `${user_id},${user_name},${team_id},${SECRET_STRING}`;
+      // Generate per-user short HMAC: hmac(userid:teamid:username)
+      const hmacSecret = crypto
+        .createHmac("sha256", SECRET_STRING)
+        .update(`${normalizedUserId}:${normalizedTeamId}:${normalizedUserName}`)
+        .digest("hex")
+        .slice(0, 12);
+
+      const qrContent = `${normalizedUserId},${normalizedUserName},${normalizedTeamId},${hmacSecret}`;
       const qrTempPath = `${outputDir}/_temp_${fileName}`;
       const finalPath = `${outputDir}/${fileName}`;
 

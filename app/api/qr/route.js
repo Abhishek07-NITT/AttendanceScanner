@@ -1,5 +1,6 @@
 import QRCode from "qrcode";
 import { google } from "googleapis";
+import crypto from "crypto";
 
 const SHEET_ID = "15B0voPZUZDSvtBuCFnGlEGxJ6g3F8fMn9Ib1QS1JNec";
 const RANGE = "A1:Z"; // Adjust range as needed
@@ -65,10 +66,22 @@ export async function POST(request) {
       return obj;
     }, {});
 
-    // Convert user details to QR Code
-    const qrData = await QRCode.toDataURL(JSON.stringify(user));
+    const userId = user.user_id || user.rollNo || user.RollNo || userRow[1] || "";
+    const userName = user.user_name || user.name || user.Name || userRow[2] || userRow[1] || "";
+    const teamId = user.team_id || user.Team || user["Team name"] || userRow[0] || "";
 
-    return new Response(JSON.stringify({ user, qrCode: qrData }), {
+    const secretString = process.env.SECRET_STRING || "transfinitte-26-secret-key";
+    const signature = crypto
+      .createHmac("sha256", secretString)
+      .update(`${userId.toString().trim()}:${teamId.toString().trim()}:${userName.toString().trim()}`)
+      .digest("hex")
+      .slice(0, 12);
+
+    const qrPayload = `${userId},${userName},${teamId},${signature}`;
+    // Convert formatted details to QR Code
+    const qrData = await QRCode.toDataURL(qrPayload);
+
+    return new Response(JSON.stringify({ user, qrCode: qrData, qrPayload }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });

@@ -1,18 +1,44 @@
 @import "tailwindcss";
-#reader {
-  width: 100% !important;
-  height: 500px !important;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+
+:root {
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --bg-deep: #050505;
+  --card-bg: #0d0d0d;
+  --card-border: #1f1f1f;
+  --card-subtle: #141414;
 }
-#reader video {
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: cover !important;
-  border-radius: 12px;
+
+body {
+  background-color: #050505;
+  color: #ededed;
+  overscroll-behavior-y: contain;
+  touch-action: manipulation;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
-#reader__scan_region {
-  width: 100% !important;
-  height: 100% !important;
+
+/* Subtle Transfinitte tech grid */
+.tf-grid {
+  background-size: 36px 36px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+}
+
+@keyframes scanline {
+  0% {
+    top: 4%;
+    opacity: 0.2;
+  }
+  50% {
+    top: 96%;
+    opacity: 0.9;
+  }
+  100% {
+    top: 4%;
+    opacity: 0.2;
+  }
+}
+
+.animate-scanline {
+  animation: scanline 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
