@@ -68,14 +68,27 @@ export default function ZXingScanner() {
     });
   }, []);
 
-  // Stop camera tracks cleanly
+  // Stop camera tracks cleanly and release hardware lock
   const stopCameraStream = useCallback(() => {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
+      try {
+        const tracks = streamRef.current.getTracks();
+        tracks.forEach((track) => {
+          track.stop();
+          track.enabled = false;
+        });
+      } catch (e) {
+        console.error("Error stopping tracks:", e);
+      }
       streamRef.current = null;
     }
     if (videoRef.current) {
-      videoRef.current.srcObject = null;
+      try {
+        videoRef.current.pause();
+        videoRef.current.srcObject = null;
+      } catch (e) {
+        // ignore
+      }
     }
     setCameraActive(false);
     setIsTorchAvailable(false);
@@ -86,6 +99,9 @@ export default function ZXingScanner() {
   const startCamera = useCallback(async () => {
     stopCameraStream();
     setCameraError(null);
+
+    // Give browser a 100ms micro-pause to release the hardware camera sensor
+    await new Promise((r) => setTimeout(r, 100));
 
     // 1. Check if browser environment supports mediaDevices in current context
     if (typeof window === "undefined" || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -102,44 +118,13 @@ export default function ZXingScanner() {
     let stream = null;
     let lastErr = null;
 
-    // 2. Query available video devices (crucial for Brave / Android multi-lens cameras)
-    let videoDevices = [];
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      videoDevices = devices.filter((d) => d.kind === "videoinput");
-    } catch {
-      // Continue without device enumeration
-    }
-
-    // Identify target device ID if available
-    let targetDeviceId = undefined;
-    if (videoDevices.length > 0) {
-      const isLookingForBack = facingMode === "environment";
-      const matchedDevice = videoDevices.find((d) => {
-        const label = (d.label || "").toLowerCase();
-        return isLookingForBack
-          ? label.includes("back") || label.includes("rear") || label.includes("environment")
-          : label.includes("front") || label.includes("user");
-      });
-      if (matchedDevice) {
-        targetDeviceId = matchedDevice.deviceId;
-      }
-    }
-
-    // 3. Progressive constraint strategy: deviceId -> exact facingMode -> ideal facingMode -> bare minimum
-    const constraintList = [];
-
-    if (targetDeviceId) {
-      constraintList.push({
-        video: { deviceId: { exact: targetDeviceId } },
-        audio: false,
-      });
-    }
-
-    constraintList.push(
+    // 2. Progressive constraint strategy:
+    // Brave Shields often reject exact deviceId checks due to fingerprinting protection.
+    // We prioritize facingMode: { ideal: ... } followed by generic video constraints.
+    const constraintList = [
       {
         video: {
-          facingMode: { exact: facingMode },
+          facingMode: { ideal: facingMode },
           width: { ideal: 1280 },
           height: { ideal: 720 },
         },
@@ -147,15 +132,15 @@ export default function ZXingScanner() {
       },
       {
         video: {
-          facingMode: { ideal: facingMode },
+          facingMode: facingMode,
         },
         audio: false,
       },
       {
         video: true,
         audio: false,
-      }
-    );
+      },
+    ];
 
     for (const constraints of constraintList) {
       try {
