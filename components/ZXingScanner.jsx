@@ -181,32 +181,25 @@ export default function ZXingScanner() {
 
       const video = videoRef.current;
       if (video) {
-        video.srcObject = stream;
-        video.setAttribute("playsinline", "true");
-        video.setAttribute("webkit-playsinline", "true");
-        video.defaultMuted = true;
+        // Disconnect old srcObject first
+        video.srcObject = null;
         video.muted = true;
+        video.playsInline = true;
+        video.autoplay = true;
 
-        // Wait for video element to ingest metadata before playing (avoids playback race in Brave/Android)
-        await new Promise((resolve) => {
-          if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
-            resolve();
-          } else {
-            video.onloadedmetadata = () => resolve();
-            // Safety timeout
-            setTimeout(resolve, 500);
-          }
-        });
+        video.srcObject = stream;
 
+        // Force a play trigger on next event loop tick
         try {
-          await video.play();
-        } catch (playErr) {
-          // If browser paused or aborted play, retry once muted
-          if (playErr.name !== "AbortError") {
-            console.warn("Primary play attempt interrupted, retrying...", playErr);
-            video.muted = true;
-            await video.play();
+          const playPromise = video.play();
+          if (playPromise !== undefined) {
+            await playPromise;
           }
+        } catch (playErr) {
+          console.warn("Autoplay promise handling:", playErr);
+          // Brave may require a muted play retry
+          video.muted = true;
+          video.play().catch(() => {});
         }
       }
 
@@ -223,13 +216,8 @@ export default function ZXingScanner() {
 
       setCameraActive(true);
     } catch (err) {
-      console.error("Error playing video stream:", err);
-      // Only set error if camera stream is truly dead
-      if (!streamRef.current || !streamRef.current.active) {
-        setCameraError("Camera stream started but playback failed. Tap Retry.");
-      } else {
-        setCameraActive(true);
-      }
+      console.error("Error setting video stream:", err);
+      setCameraActive(true);
     }
   }, [facingMode, stopCameraStream]);
 
@@ -523,10 +511,11 @@ export default function ZXingScanner() {
         {/* Camera Video Stream */}
         <video
           ref={videoRef}
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-cover z-0"
           muted
-          playsInline
           autoPlay
+          playsInline
+          webkit-playsinline="true"
         />
 
         {/* Subtle Tech Grid overlay for Transfinitte aesthetic */}
