@@ -82,16 +82,64 @@ export default function ZXingScanner() {
     setIsTorchOn(false);
   }, []);
 
-  // Robust mobile camera initialization
+  // Robust mobile camera initialization with Brave & Android support
   const startCamera = useCallback(async () => {
     stopCameraStream();
     setCameraError(null);
 
-    // Progressive fallback constraints for maximum mobile browser compatibility
-    const constraintList = [
+    // 1. Check if browser environment supports mediaDevices in current context
+    if (typeof window === "undefined" || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      if (typeof window !== "undefined" && !window.isSecureContext) {
+        setCameraError(
+          "Camera requires a secure connection (HTTPS). If testing over local Wi-Fi, use localhost or an HTTPS tunnel."
+        );
+      } else {
+        setCameraError("Camera API is not supported or blocked by your browser settings.");
+      }
+      return;
+    }
+
+    let stream = null;
+    let lastErr = null;
+
+    // 2. Query available video devices (crucial for Brave / Android multi-lens cameras)
+    let videoDevices = [];
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      videoDevices = devices.filter((d) => d.kind === "videoinput");
+    } catch {
+      // Continue without device enumeration
+    }
+
+    // Identify target device ID if available
+    let targetDeviceId = undefined;
+    if (videoDevices.length > 0) {
+      const isLookingForBack = facingMode === "environment";
+      const matchedDevice = videoDevices.find((d) => {
+        const label = (d.label || "").toLowerCase();
+        return isLookingForBack
+          ? label.includes("back") || label.includes("rear") || label.includes("environment")
+          : label.includes("front") || label.includes("user");
+      });
+      if (matchedDevice) {
+        targetDeviceId = matchedDevice.deviceId;
+      }
+    }
+
+    // 3. Progressive constraint strategy: deviceId -> exact facingMode -> ideal facingMode -> bare minimum
+    const constraintList = [];
+
+    if (targetDeviceId) {
+      constraintList.push({
+        video: { deviceId: { exact: targetDeviceId } },
+        audio: false,
+      });
+    }
+
+    constraintList.push(
       {
         video: {
-          facingMode: { ideal: facingMode },
+          facingMode: { exact: facingMode },
           width: { ideal: 1280 },
           height: { ideal: 720 },
         },
@@ -99,18 +147,15 @@ export default function ZXingScanner() {
       },
       {
         video: {
-          facingMode: facingMode,
+          facingMode: { ideal: facingMode },
         },
         audio: false,
       },
       {
         video: true,
         audio: false,
-      },
-    ];
-
-    let stream = null;
-    let lastErr = null;
+      }
+    );
 
     for (const constraints of constraintList) {
       try {
@@ -118,17 +163,31 @@ export default function ZXingScanner() {
         if (stream) break;
       } catch (err) {
         lastErr = err;
-        // Continue to fallback constraint
       }
     }
 
     if (!stream) {
       console.error("Camera access failed with all constraints:", lastErr);
-      setCameraError(
-        lastErr?.name === "NotAllowedError" || lastErr?.name === "PermissionDeniedError"
-          ? "Camera permission denied. Tap your browser address bar to allow camera access."
-          : `Camera unavailable: ${lastErr?.message || "Please verify camera permissions."}`
-      );
+      const isPermissionDenied =
+        lastErr?.name === "NotAllowedError" ||
+        lastErr?.name === "PermissionDeniedError" ||
+        lastErr?.name === "SecurityError";
+
+      const isBrave = typeof navigator !== "undefined" && Boolean(navigator.brave);
+
+      if (isPermissionDenied) {
+        setCameraError(
+          isBrave
+            ? "Brave blocked camera access. Tap the Brave Shields / Lock icon in the address bar and allow Camera permission."
+            : "Camera permission denied. Tap the lock/tune icon in your address bar and allow Camera."
+        );
+      } else if (!window.isSecureContext) {
+        setCameraError(
+          "Android requires HTTPS for camera access. Please access via localhost or deploy to Vercel (HTTPS)."
+        );
+      } else {
+        setCameraError(`Camera unavailable: ${lastErr?.message || "Please check camera permissions."}`);
+      }
       return;
     }
 
@@ -139,6 +198,7 @@ export default function ZXingScanner() {
         videoRef.current.srcObject = stream;
         videoRef.current.setAttribute("playsinline", "true");
         videoRef.current.setAttribute("webkit-playsinline", "true");
+        videoRef.current.muted = true;
         await videoRef.current.play();
       }
 
@@ -156,7 +216,7 @@ export default function ZXingScanner() {
       setCameraActive(true);
     } catch (err) {
       console.error("Error playing video stream:", err);
-      setCameraError("Failed to start video playback. Please tap Retry.");
+      setCameraError("Camera stream started but playback failed. Tap Retry.");
     }
   }, [facingMode, stopCameraStream]);
 
