@@ -1,6 +1,6 @@
-# Transfinitte QR Badge & Printable PDF Generator
+# Transfinitte QR Code PNG Generator
 
-A zero-dependency vector PDF badge generator for Transfinitte event participants. Reads participant data from a CSV and generates print-ready A4 badge sheets formatted in a clean 3×4 grid (12 badges per sheet).
+A fast batch QR code generator for Transfinitte event participants. Reads participant data from a CSV file and saves individual high-resolution PNG images named by each participant's `user_id` inside `qr_generator/output/`.
 
 ---
 
@@ -9,18 +9,23 @@ A zero-dependency vector PDF badge generator for Transfinitte event participants
 ### 1. Prepare your CSV
 Save your participant spreadsheet as a `.csv` inside `qr_generator/input/` (e.g., `qr_generator/input/participants.csv`).
 
-### 2. Generate the PDF
+### 2. Generate the QR Code Images
 Run the generator using npm:
 ```bash
-npm run generate:pdf
+npm run generate:qr
 ```
 
-Or specify custom input/output paths directly:
+Or run directly with Node:
 ```bash
-node qr_generator/generate_pdf.js qr_generator/input/participants.csv qr_generator/output/badges.pdf
+node qr_generator/generate_qr.js
 ```
 
-The resulting file will be written to `qr_generator/output/badges.pdf`, ready to print on standard A4 paper.
+You can also specify custom input/output paths:
+```bash
+node qr_generator/generate_qr.js path/to/participants.csv path/to/output_folder/
+```
+
+The resulting PNG images will be saved in `qr_generator/output/<user_id>.png` (e.g. `101.png`, `102.png`, etc.).
 
 ---
 
@@ -32,7 +37,7 @@ The CSV parser supports standard comma-delimited columns with flexible naming:
 | :--- | :--- | :--- | :--- |
 | **Team ID** | `team_id`, `team` | Unique team code | `T101` |
 | **Team Name** | `team_name`, `team` | Name of the team | `TeamAlpha` |
-| **User ID** | `user_id`, `id`, `rollNo` | Participant ID or College Roll Number | `101` |
+| **User ID** | `user_id`, `id`, `rollno` | Participant ID or College Roll Number | `101` |
 | **User Name** | `user_name`, `name` | Full name of the participant | `John Doe` |
 
 ### Sample CSV (`participants_sample.csv`):
@@ -48,7 +53,7 @@ T104,TeamCyber,104,Sarah Connor
 
 ## 🏷️ QR Code Payload Format
 
-Each badge encodes the participant information in the colon-separated format:
+Each generated image encodes participant data in the standard format:
 ```text
 teamid:teamname:userid:username
 ```
@@ -60,13 +65,19 @@ T101:TeamAlpha:101:John Doe
 
 ---
 
-## 🖨️ Badge Sheet Layout (A4)
+## 📁 Output Structure
 
-- **Grid**: 3 Columns × 4 Rows = **12 ID Badges per A4 page**.
-- **Badge Anatomy**:
-  - Dark header band branded with **TRANSFINITTE '26**.
-  - High-contrast centered QR code.
-  - Bold participant name.
-  - Subtitle with `Team Name | User ID`.
-  - Outer border guides for easy paper cutting.
-- **Zero Native Dependencies**: Pure JavaScript vector rendering (no C++ compilers, `canvas`, or `node-gyp` required).
+```
+qr_generator/
+├── input/
+│   └── participants_sample.csv
+├── output/
+│   ├── 101.png
+│   ├── 102.png
+│   ├── 103.png
+│   ├── 104.png
+│   ├── 105.png
+│   └── 106.png
+├── generate_qr.js
+└── README.md
+```

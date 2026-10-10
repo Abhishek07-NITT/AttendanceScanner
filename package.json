@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "generate:pdf": "node qr_generator/generate_pdf.js"
+    "generate:qr": "node qr_generator/generate_qr.js",
+    "generate:pdf": "node qr_generator/generate_qr.js"
   },
   "dependencies": {
     "@googleapis/sheets": "^18.1.1",
