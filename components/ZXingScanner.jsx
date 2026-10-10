@@ -41,6 +41,10 @@ export default function ZXingScanner({ sessionId, onLogout }) {
   const [facingMode, setFacingMode] = useState("environment");
   const [isTorchAvailable, setIsTorchAvailable] = useState(false);
   const [isTorchOn, setIsTorchOn] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [isHardwareZoom, setIsHardwareZoom] = useState(false);
+  const [focusPoint, setFocusPoint] = useState(null);
+  const [isFocusing, setIsFocusing] = useState(false);
 
   // Scan states: null | 'processing' | 'success' | 'error'
   const [scanState, setScanState] = useState(null);
@@ -125,6 +129,15 @@ export default function ZXingScanner({ sessionId, onLogout }) {
       {
         video: {
           facingMode: { ideal: facingMode },
+          width: { ideal: 1920, min: 1280 },
+          height: { ideal: 1080, min: 720 },
+          advanced: [{ focusMode: "continuous" }],
+        },
+        audio: false,
+      },
+      {
+        video: {
+          facingMode: { ideal: facingMode },
           width: { ideal: 1280 },
           height: { ideal: 720 },
         },
@@ -203,14 +216,35 @@ export default function ZXingScanner({ sessionId, onLogout }) {
         }
       }
 
-      // Check flashlight/torch support
+      // Check camera hardware capabilities (Torch, Zoom, Autofocus)
       const videoTrack = stream.getVideoTracks()[0];
       if (videoTrack?.getCapabilities) {
         try {
           const caps = videoTrack.getCapabilities();
           setIsTorchAvailable(Boolean(caps.torch));
+
+          // Hardware zoom capability
+          if (caps.zoom) {
+            setIsHardwareZoom(true);
+            const minZ = caps.zoom.min || 1;
+            const maxZ = caps.zoom.max || 5;
+            const clamped = Math.min(Math.max(zoom, minZ), maxZ);
+            videoTrack.applyConstraints({
+              advanced: [{ zoom: clamped }],
+            }).catch(() => {});
+          } else {
+            setIsHardwareZoom(false);
+          }
+
+          // Apply continuous autofocus if hardware supports it
+          if (caps.focusMode && caps.focusMode.includes("continuous")) {
+            videoTrack.applyConstraints({
+              advanced: [{ focusMode: "continuous" }],
+            }).catch(() => {});
+          }
         } catch {
           setIsTorchAvailable(false);
+          setIsHardwareZoom(false);
         }
       }
 
@@ -219,7 +253,79 @@ export default function ZXingScanner({ sessionId, onLogout }) {
       console.error("Error setting video stream:", err);
       setCameraActive(true);
     }
-  }, [facingMode, stopCameraStream]);
+  }, [facingMode, stopCameraStream, zoom]);
+
+  // Trigger camera focus (Tap-to-Focus or button)
+  const triggerFocus = useCallback(async (e) => {
+    if (isPausedRef.current) return;
+
+    let x = typeof window !== "undefined" ? window.innerWidth / 2 : 160;
+    let y = typeof window !== "undefined" ? window.innerHeight / 2 : 240;
+
+    if (e && e.clientX && e.clientY) {
+      x = e.clientX;
+      y = e.clientY;
+    }
+
+    setFocusPoint({ x, y });
+    setIsFocusing(true);
+
+    setTimeout(() => {
+      setFocusPoint(null);
+      setIsFocusing(false);
+    }, 1200);
+
+    if (!streamRef.current) return;
+    const track = streamRef.current.getVideoTracks()[0];
+    if (!track) return;
+
+    try {
+      const caps = track.getCapabilities?.() || {};
+      if (caps.focusMode) {
+        if (caps.focusMode.includes("single-shot")) {
+          await track.applyConstraints({
+            advanced: [{ focusMode: "single-shot" }],
+          });
+        }
+        if (caps.focusMode.includes("continuous")) {
+          setTimeout(async () => {
+            try {
+              await track.applyConstraints({
+                advanced: [{ focusMode: "continuous" }],
+              });
+            } catch {}
+          }, 500);
+        }
+      }
+    } catch (err) {
+      console.warn("Hardware focus trigger error:", err);
+    }
+  }, []);
+
+  // Zoom control (1x, 2x, 3x) - Hardware zoom with automatic software crop fallback
+  const changeZoom = useCallback(async (newZoom) => {
+    setZoom(newZoom);
+    if (!streamRef.current) return;
+    const track = streamRef.current.getVideoTracks()[0];
+    if (!track) return;
+
+    const caps = track.getCapabilities?.() || {};
+    if (caps.zoom) {
+      try {
+        const minZ = caps.zoom.min || 1;
+        const maxZ = caps.zoom.max || 5;
+        const clamped = Math.min(Math.max(newZoom, minZ), maxZ);
+        await track.applyConstraints({
+          advanced: [{ zoom: clamped }],
+        });
+        setIsHardwareZoom(true);
+        return;
+      } catch (err) {
+        console.warn("Hardware zoom error, using software zoom:", err);
+      }
+    }
+    setIsHardwareZoom(false);
+  }, []);
 
   // Flashlight toggle
   const toggleTorch = async () => {
@@ -424,12 +530,23 @@ export default function ZXingScanner({ sessionId, onLogout }) {
         canvas.width = vw;
         canvas.height = vh;
         const ctx = canvas.getContext("2d", { willReadFrequently: true });
-        ctx.drawImage(video, 0, 0, vw, vh);
+
+        // If hardware zoom is NOT supported by browser, crop the center video region
+        // at full native resolution so small QR codes are significantly magnified!
+        if (!isHardwareZoom && zoom > 1) {
+          const cropW = vw / zoom;
+          const cropH = vh / zoom;
+          const sx = (vw - cropW) / 2;
+          const sy = (vh - cropH) / 2;
+          ctx.drawImage(video, sx, sy, cropW, cropH, 0, 0, vw, vh);
+        } else {
+          ctx.drawImage(video, 0, 0, vw, vh);
+        }
 
         const imageData = ctx.getImageData(0, 0, vw, vh);
         const barcodes = await readBarcodes(imageData, {
           formats: ["QRCode"],
-          tryHarder: false,
+          tryHarder: true, // Enables high-density and multi-scale scanning for small QRs
         });
 
         if (barcodes && barcodes.length > 0 && isMounted && !isPausedRef.current) {
@@ -451,7 +568,7 @@ export default function ZXingScanner({ sessionId, onLogout }) {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [handleScannedPayload]);
+  }, [handleScannedPayload, isHardwareZoom, zoom]);
 
   return (
     <div className="relative w-full h-[100dvh] flex flex-col bg-[#050505] text-[#ededed] overflow-hidden select-none font-sans">
@@ -556,11 +673,18 @@ export default function ZXingScanner({ sessionId, onLogout }) {
       </div>
 
       {/* MAIN CAMERA VIEWPORT */}
-      <main className="relative flex-1 w-full bg-[#050505] overflow-hidden flex items-center justify-center">
-        {/* Camera Video Stream */}
+      <main
+        onClick={triggerFocus}
+        className="relative flex-1 w-full bg-[#050505] overflow-hidden flex items-center justify-center cursor-crosshair select-none"
+      >
+        {/* Camera Video Stream (Hardware or Software Zoom Scaled) */}
         <video
           ref={videoRef}
-          className="absolute inset-0 w-full h-full object-cover z-0"
+          className="absolute inset-0 w-full h-full object-cover z-0 transition-transform duration-200 ease-out"
+          style={{
+            transform: !isHardwareZoom && zoom > 1 ? `scale(${zoom})` : undefined,
+            transformOrigin: "center center",
+          }}
           muted
           autoPlay
           playsInline
@@ -573,8 +697,25 @@ export default function ZXingScanner({ sessionId, onLogout }) {
         {/* Dark Vignette Overlay with cutout focus */}
         <div className="absolute inset-0 bg-black/45 pointer-events-none" />
 
+        {/* Animated Tap-To-Focus Ring Indicator */}
+        {focusPoint && (
+          <div
+            style={{
+              left: focusPoint.x - 32,
+              top: focusPoint.y - 32,
+            }}
+            className="fixed pointer-events-none z-30 w-16 h-16 border-2 border-yellow-400/90 rounded-sm animate-focus-ring flex items-center justify-center shadow-[0_0_15px_rgba(250,204,21,0.5)]"
+          >
+            <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full" />
+            <div className="absolute -top-1 -left-1 w-2 h-2 border-t-2 border-l-2 border-yellow-400" />
+            <div className="absolute -top-1 -right-1 w-2 h-2 border-t-2 border-r-2 border-yellow-400" />
+            <div className="absolute -bottom-1 -left-1 w-2 h-2 border-b-2 border-l-2 border-yellow-400" />
+            <div className="absolute -bottom-1 -right-1 w-2 h-2 border-b-2 border-r-2 border-yellow-400" />
+          </div>
+        )}
+
         {/* MINIMAL TRANSFINITTE CORNER RETICLE */}
-        <div className="relative w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center">
+        <div className="relative w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center pointer-events-none">
           {/* Subtle Outer Frame */}
           <div className="absolute inset-0 rounded-2xl border border-white/[0.08] pointer-events-none" />
 
@@ -601,10 +742,35 @@ export default function ZXingScanner({ sessionId, onLogout }) {
             <p className="text-[11px] font-mono uppercase tracking-wider text-[#aaaaaa]">
               {isPausedRef.current
                 ? "Processing Badge..."
-                : "Align QR inside corners"}
+                : zoom > 1
+                ? `Zoomed ${zoom}x • Tap screen to focus`
+                : "Align QR in corners • Tap to focus"}
             </p>
           </div>
         </div>
+
+        {/* FLOATING ZOOM SELECTOR (1x / 2x / 3x) for Small QRs */}
+        {cameraActive && !isPausedRef.current && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 p-1 rounded-full bg-[#111111]/85 backdrop-blur-md border border-[#2a2a2a] shadow-xl"
+          >
+            {[1, 2, 3].map((lvl) => (
+              <button
+                key={lvl}
+                onClick={() => changeZoom(lvl)}
+                className={`w-8 h-8 rounded-full text-xs font-mono font-bold transition-all cursor-pointer flex items-center justify-center ${
+                  zoom === lvl
+                    ? "bg-white text-black shadow-md scale-105"
+                    : "text-[#888888] hover:text-white hover:bg-[#202020]"
+                }`}
+                title={`Zoom ${lvl}x for small QR codes`}
+              >
+                {lvl}x
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* CAMERA ERROR STATE */}
         {cameraError && (
@@ -725,7 +891,7 @@ export default function ZXingScanner({ sessionId, onLogout }) {
       </main>
 
       {/* BOTTOM MOBILE ACTION CONTROLS */}
-      <footer className="z-20 w-full px-8 py-3.5 bg-[#050505]/90 backdrop-blur-md border-t border-[#1a1a1a] flex items-center justify-around gap-6">
+      <footer className="z-20 w-full px-5 py-3 bg-[#050505]/90 backdrop-blur-md border-t border-[#1a1a1a] flex items-center justify-around gap-4">
         {/* Flashlight / Torch Toggle */}
         <button
           onClick={toggleTorch}
@@ -743,6 +909,26 @@ export default function ZXingScanner({ sessionId, onLogout }) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
           <span className="text-[10px] font-mono tracking-wider uppercase">Torch</span>
+        </button>
+
+        {/* Refocus Camera */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            triggerFocus();
+          }}
+          className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all ${
+            isFocusing
+              ? "text-yellow-400 bg-[#1c1c1c] border border-yellow-400/40 scale-105"
+              : "text-[#888888] hover:text-white hover:bg-[#111111] active:scale-95"
+          }`}
+          title="Refocus Camera"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="3" strokeWidth="2" />
+            <path strokeLinecap="round" strokeWidth="2" d="M12 2v3m0 14v3M2 12h3m14 0h3" />
+          </svg>
+          <span className="text-[10px] font-mono tracking-wider uppercase">Focus</span>
         </button>
 
         {/* Flip Camera (Front/Back) */}
