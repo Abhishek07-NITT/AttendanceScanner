@@ -65,15 +65,15 @@ function findParticipantIndex(rows, targetUserId, targetTeamId) {
     const colTeamName = (r[1] || "").toString().trim().toLowerCase();
     const colUserId = (r[2] || "").toString().trim().toLowerCase();
 
-    // Match User ID (Column C) AND Team ID / Team Name (Column A or B)
+    // 1. Both User ID and Team ID/Name present
     if (targetUserId && targetTeamId) {
-      const isUserMatch = colUserId === targetUserId || colTeamName === targetUserId;
+      const isUserMatch = colUserId === targetUserId;
       const isTeamMatch = colTeamId === targetTeamId || colTeamName === targetTeamId;
       if (isUserMatch && isTeamMatch) return true;
     }
 
-    // Direct User ID match fallback
-    if (targetUserId && (colUserId === targetUserId || colTeamName === targetUserId)) {
+    // 2. Exact User ID match (Column C: 3rd column)
+    if (targetUserId && colUserId === targetUserId) {
       return true;
     }
 
@@ -135,9 +135,15 @@ export async function POST(req) {
     }
 
     // Target spreadsheet cell coordinates
+    // Col A (1) = Team ID
+    // Col B (2) = Team Name
+    // Col C (3) = User ID
+    // Col D (4) = User Name
+    // Col E (5) = Attendance 1  <-- Column 5 unconditionally
     const rowNumber = rowIndex + 1; // 1-indexed in Google Sheets
-    const baseCol = parseInt(process.env.ATTENDANCE_COL || "5", 10); // Column E = 5
-    const colNum = baseCol + (parseInt(attendanceIndex, 10) - 1);
+    const baseCol = 5; // Attendance 1 is strictly Column E (Column 5)
+    const idx = Math.max(1, parseInt(attendanceIndex, 10) || 1);
+    const colNum = baseCol + (idx - 1); // For attendance 1: 5 + 0 = 5 (E). For attendance 2: 5 + 1 = 6 (F).
     const colLetter = colNumberToLetter(colNum);
     const cellRange = `${colLetter}${rowNumber}`;
 
