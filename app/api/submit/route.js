@@ -1,6 +1,7 @@
 import { sheets } from "@googleapis/sheets";
 import { GoogleAuth } from "google-auth-library";
 import { NextResponse } from "next/server";
+import { verifySession } from "@/lib/auth";
 
 const SHEET_ID = process.env.SHEET_ID;
 const RANGE = "A:N"; // Columns A through N: Team ID, Team Name, User ID, User Name, Attendance 1..10
@@ -85,8 +86,22 @@ function findParticipantIndex(rows, targetUserId, targetTeamId) {
 export async function POST(req) {
   try {
     const body = await req.json();
-    const qrRaw = body.qr;
-    const attendanceIndex = body.attendanceIndex ?? 1;
+
+    // Authenticate request using session ID
+    const sessionId =
+      req.headers.get("x-session-id") ||
+      req.cookies.get("tf_session")?.value ||
+      body?.sessionId;
+
+    if (!sessionId || !verifySession(sessionId)) {
+      return NextResponse.json(
+        { error: "Unauthorized: Invalid or expired session. Please log in again." },
+        { status: 401 }
+      );
+    }
+
+    const qrRaw = body?.qr;
+    const attendanceIndex = body?.attendanceIndex ?? 1;
 
     if (!qrRaw || typeof qrRaw !== "string") {
       return NextResponse.json({ error: "Missing qr payload" }, { status: 400 });

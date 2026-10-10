@@ -34,7 +34,7 @@ function playScanSound(isSuccess = true) {
   }
 }
 
-export default function ZXingScanner() {
+export default function ZXingScanner({ sessionId, onLogout }) {
   const [attendanceIndex, setAttendanceIndex] = useState(1);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState(null);
@@ -300,8 +300,11 @@ export default function ZXingScanner() {
       try {
         const res = await fetch("/api/submit", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ qr: decodedText, attendanceIndex }),
+          headers: {
+            "Content-Type": "application/json",
+            "x-session-id": sessionId || "",
+          },
+          body: JSON.stringify({ qr: decodedText, attendanceIndex, sessionId }),
         });
 
         let json = null;
@@ -309,6 +312,19 @@ export default function ZXingScanner() {
           json = await res.json();
         } catch {
           json = { error: `Server error (${res.status})` };
+        }
+
+        // If session expired or invalid, alert and trigger logout
+        if (res.status === 401) {
+          playScanSound(false);
+          setScanState("error");
+          setResultData({
+            error: json?.error || "Session expired. Please log in again.",
+          });
+          setTimeout(() => {
+            onLogout?.();
+          }, 1500);
+          return;
         }
 
         if (res.ok && json.success) {
@@ -344,7 +360,7 @@ export default function ZXingScanner() {
         });
       }
     },
-    [attendanceIndex]
+    [attendanceIndex, sessionId, onLogout]
   );
 
   // File gallery handler
@@ -468,28 +484,44 @@ export default function ZXingScanner() {
           </span>
         </div>
 
-        {/* Status Pill matching the badge in the screenshot */}
-        <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#111111] border border-[#222222]">
-          <span
-            className={`w-1.5 h-1.5 rounded-full ${
-              scanState === "success"
-                ? "bg-white animate-ping"
+        <div className="flex items-center gap-2">
+          {/* Status Pill matching the badge in the screenshot */}
+          <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#111111] border border-[#222222]">
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                scanState === "success"
+                  ? "bg-white animate-ping"
+                  : isPausedRef.current
+                  ? "bg-neutral-500"
+                  : cameraActive
+                  ? "bg-white animate-pulse"
+                  : "bg-red-500"
+              }`}
+            />
+            <span className="text-[11px] font-mono tracking-tight text-[#aaaaaa]">
+              {scanState === "success"
+                ? "MARKED"
                 : isPausedRef.current
-                ? "bg-neutral-500"
+                ? "PAUSED"
                 : cameraActive
-                ? "bg-white animate-pulse"
-                : "bg-red-500"
-            }`}
-          />
-          <span className="text-[11px] font-mono tracking-tight text-[#aaaaaa]">
-            {scanState === "success"
-              ? "MARKED"
-              : isPausedRef.current
-              ? "PAUSED"
-              : cameraActive
-              ? "ACTIVE"
-              : "OFFLINE"}
-          </span>
+                ? "ACTIVE"
+                : "OFFLINE"}
+            </span>
+          </div>
+
+          {/* Logout Action */}
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="p-1.5 rounded-lg bg-[#111111] border border-[#222222] text-[#888888] hover:text-white hover:bg-[#1a1a1a] transition-all cursor-pointer"
+              title="Sign out of scanner"
+              aria-label="Sign out"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </button>
+          )}
         </div>
       </header>
 
