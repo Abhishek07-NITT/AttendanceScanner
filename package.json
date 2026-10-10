@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "generate:pdf": "node qr_generator/generate_pdf.js"
   },
   "dependencies": {
     "dotenv": "^17.2.3",

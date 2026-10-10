@@ -263,20 +263,37 @@ export default function ZXingScanner() {
         navigator.vibrate([80]);
       }
 
-      // 3. Parse user details from QR client-side
-      const parts = decodedText.split(",").map((p) => p.trim());
-      let parsedUserId = parts[0] || "";
-      let parsedUserName = "";
+      // 3. Parse user details from QR: teamid:teamname:userid:username (or comma separated fallback)
       let parsedTeamId = "";
-      if (parts.length >= 4) {
-        parsedTeamId = parts[parts.length - 2];
-        parsedUserName = parts.slice(1, parts.length - 2).join(",").trim();
+      let parsedTeamName = "";
+      let parsedUserId = "";
+      let parsedUserName = "";
+
+      if (decodedText.includes(":")) {
+        const colonParts = decodedText.split(":").map((p) => p.trim());
+        if (colonParts.length >= 4) {
+          parsedTeamId = colonParts[0] || "";
+          parsedTeamName = colonParts[1] || "";
+          parsedUserId = colonParts[2] || "";
+          parsedUserName = colonParts.slice(3).join(":").trim();
+        } else if (colonParts.length === 3) {
+          parsedTeamId = colonParts[0] || "";
+          parsedUserId = colonParts[1] || "";
+          parsedUserName = colonParts[2] || "";
+        }
+      } else {
+        const parts = decodedText.split(",").map((p) => p.trim());
+        parsedUserId = parts[0] || "";
+        if (parts.length >= 3) {
+          parsedTeamId = parts[parts.length - 2] || "";
+          parsedUserName = parts.slice(1, parts.length - 2).join(",").trim() || parts[1] || "";
+        }
       }
 
       setScanState("processing");
       setResultData({
         user_name: parsedUserName || "Participant",
-        team_id: parsedTeamId,
+        team_id: parsedTeamName ? `${parsedTeamId} (${parsedTeamName})` : parsedTeamId,
         user_id: parsedUserId,
       });
 
