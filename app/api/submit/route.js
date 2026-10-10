@@ -1,4 +1,5 @@
-import { google } from "googleapis";
+import { sheets } from "@googleapis/sheets";
+import { GoogleAuth } from "google-auth-library";
 import { NextResponse } from "next/server";
 
 const SHEET_ID = process.env.SHEET_ID;
@@ -16,7 +17,7 @@ function getSheetsClient() {
   const rawKey = process.env.GOOGLE_PRIVATE_KEY || "";
   const cleanedKey = rawKey.replace(/^"|"$/g, "").replace(/\\n/g, "\n");
 
-  const auth = new google.auth.GoogleAuth({
+  const auth = new GoogleAuth({
     credentials: {
       type: "service_account",
       project_id: process.env.GOOGLE_PROJECT_ID,
@@ -26,7 +27,7 @@ function getSheetsClient() {
     scopes: ["https://www.googleapis.com/auth/spreadsheets"],
   });
 
-  cachedSheets = google.sheets({ version: "v4", auth });
+  cachedSheets = sheets({ version: "v4", auth });
   return cachedSheets;
 }
 
